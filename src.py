@@ -8,13 +8,30 @@ from math import floor
 import json
 
 vkDump = False
-FastSearch = False
+FastSearch = True
 cid = ''
 secret = ''
 redirect = ''
 vkNumber = ''
 vkPass = ''
 
+def transliterate(name):
+   slovar = {'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e',
+      'ж':'ge','з':'z','и':'i','й':'i','к':'k','л':'l','м':'m','н':'n',
+      'о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h',
+      'ц':'c','ч':'cz','ш':'sh','щ':'sch','ъ':'','ы':'y','ь':'','э':'e',
+      'ю':'u','я':'ya', 'А':'A','Б':'B','В':'V','Г':'G','Д':'D','Е':'E','Ё':'E',
+      'Ж':'ge','З':'Z','И':'I','Й':'I','К':'K','Л':'L','М':'M','Н':'N',
+      'О':'O','П':'P','Р':'R','С':'S','Т':'T','У':'U','Ф':'F','Х':'H',
+      'Ц':'C','Ч':'CZ','Ш':'SH','Щ':'SCH','Ъ':'','Ы':'y','Ь':'','Э':'E',
+      'Ю':'U','Я':'YA',',':'','?':'?',' ':' ','~':'','!':'!','@':'','#':'',
+      '$':'','%':'','^':'','&':'','*':'','(':'(',')':')','-':'','=':'','+':'',
+      ':':'',';':'','<':'','>':'','\'':'','"':'','\\':'','/':'','№':'',
+      '[':'',']':'','{':'','}':'','ґ':'','ї':'', 'є':'','Ґ':'g','Ї':'i',
+      'Є':'e', '—':''}
+   for key in slovar:
+      name = name.replace(key, slovar[key])
+   return name
 
 class bcolors:
     INFO = '\033[5;37;40m'
@@ -26,23 +43,19 @@ class bcolors:
     BOLD = '\033[1m'
     HEADER = '\033[0;34;40m'
 
-
 def auth_handler():
     key = input("Enter authentication code: ")
     remember_device = True
     return key, remember_device
 
-
 def divide_chunks(l, n):
     for i in range(0, len(l), n):
         yield l[i:i + n]
 
-
 def just_search():
     return 0
 
-
-def search_by_artist(artistUri):
+def search_by_artist(sp, artistUri):
     res = sp.artist_albums(artistUri, limit=50)
     albums = []
     for i in res['items']:
@@ -98,7 +111,8 @@ def slow_search(sp):
                         tracks = c['tracks']
                         print(bcolors.BOLD + 'Static chache hint!' + bcolors.ENDC)
                         break
-            if cha:
+
+            if cha and not foundArtist:
                 for c in cha:
                     if c['Artist'] == artist:
                         foundArtist = True
@@ -107,20 +121,27 @@ def slow_search(sp):
                         break
 
             if not foundArtist:
-                res = sp.search(artist, type='artist')
-                if res['artists']['total'] > 0:
-                    tracks = search_by_artist(
-                        res['artists']['items'][0]['uri'])
-                    print(bcolors.BOLD + 'Start build the chache' + bcolors.ENDC)
-                    cha.append({'Artist': artist, 'tracks': tracks})
-                else:
-                    print(bcolors.FAIL + 'artist: ' +
-                          artist + ' not found' + bcolors.ENDC)
+                res = sp.search(artist, type='artist', limit=50)
+                ArtistFound = False
+                print(bcolors.INFO + 'Found ' + str(res['artists']['total']) + ' similar ones for the ' + artist + bcolors.ENDC)
+                alte = transliterate(artist).lower().replace(' ', '')
+                name2 = artist.lower().replace(' ', '')
+                for art in res['artists']['items']:
+                    name1=art['name'].lower().replace(' ', '')
+                    if  name1 == name2 or name1 == alte:
+                        ArtistFound = True
+                        print(bcolors.INFO + art['name'] + ' fit the best' + bcolors.ENDC)
+                        print(bcolors.BOLD + 'Start build the chache' + bcolors.ENDC)
+                        tracks = search_by_artist(sp, art['uri']) 
+                        cha.append({'Artist': artist, 'tracks': tracks})
+                        break
+                if not ArtistFound:print(bcolors.FAIL + 'artist: ' +artist + ' not found' + bcolors.ENDC)
 
             foundTrack = False
             for t in tracks:
                 name1 = t['Name'].lower().replace(' ', '')
                 if title.find(name1) >= 0 or name1.find(title) >= 0:
+                #if name1 == title:
                     foundTrack = True
                     spCount += 1
                     uris.append(t['Uri'])
@@ -130,7 +151,7 @@ def slow_search(sp):
                       title + ' not found' + bcolors.ENDC)
             else:
                 print(bcolors.OKGREEN + artist + ' ' + title +
-                      ' found: true, track uri: ' + t['Uri'] + bcolors.ENDC)
+                      ' found!, title: ' + t['Name'] + ', uri: ' + t['Uri'] + bcolors.ENDC)
         print('\n' + bcolors.OKBLUE + 'accuracy: ' + str((spCount / count) * 100) + ' the number of missed: ' + str(skip) + bcolors.ENDC)
         chache = open("vk2spotify_cash.txt", "w", encoding='utf-8')
         cha2 += cha
@@ -169,13 +190,32 @@ def fast_search(sp):
                         uris.append(t['uri'])
                         break
             if(not found):
-                print(bcolors.FAIL + artist + ' ' +title + ' not found' + bcolors.ENDC)
+                print(bcolors.FAIL + artist + ' ' +
+                      title + ' not found' + bcolors.ENDC)
             else:
-                print(bcolors.OKGREEN + artist + ' ' + title +' found: true, track uri: ' + t['uri'] + bcolors.ENDC)
+                print(bcolors.OKGREEN + artist + ' ' + title +
+                      ' found!, track uri: ' + t['uri'] + bcolors.ENDC)
     print('\n' + bcolors.OKBLUE + 'accuracy: ' + str((spCount / count) * 100) + ' the number of missed: ' + str(skip) + bcolors.ENDC)
     return uris
 
-if(vkDump):
+def chunks(l, n):
+    for i in range(0, len(l), n):
+        yield l[i:i+n]
+
+def add_track_2_spotify(sp, retrieved, playlistUri):
+    if retrieved:
+        user_id = sp.me()['id']
+        chanks = list(chunks(retrieved, 60))
+        #chanks = [retrieved[i::chankSize] for i in range(chankSize)]
+        print('\n' + bcolors.INFO + 'Chanks count: ' +
+              str(len(chanks)) + bcolors.ENDC)
+        count = 0
+        for rn in chanks:
+            print(bcolors.INFO +'Chank[' + str(count) + '] added to playlist' + bcolors.ENDC)
+            sp.user_playlist_add_tracks(user_id, playlistUri, rn)
+            count += 1
+
+def get_vk_mus():
     vk_session = vk_api.VkApi(vkNumber, vkPass, auth_handler=auth_handler)
     vk_session.auth()
     vk = vk_session.get_api()
@@ -185,46 +225,74 @@ if(vkDump):
             print(track['artist'] + '|' + track['title'] + "\n")
             f.write(track['artist'] + '|' + track['title'] + "\n")
 
+def sp_auth():
+    oauth = spotipy.SpotifyOAuth(
+        client_id=cid, client_secret=secret, redirect_uri=redirect, cache_path='.spotify-cache',
+        scope="playlist-modify-private user-library-modify user-library-read playlist-modify-public"
+    )
+    return spotipy.Spotify(auth_manager=oauth)
 
-oauth = spotipy.SpotifyOAuth(
-    client_id=cid, client_secret=secret, redirect_uri=redirect, cache_path='.spotify-cache',
-    scope="playlist-modify-private user-library-modify user-library-read playlist-modify-public"
-)
-sp = spotipy.Spotify(auth_manager=oauth)
+def sp_build_playlist(sp):
+    user_id = sp.me()['id']
+    results = sp.current_user_playlists(limit=50)
+    findVkMus = False
+    playlistUri = ""
+    for i, item in enumerate(results['items']):
+        if item['name'] == 'VkMusic':
+            findVkMus = True
+            print(bcolors.INFO +
+                  'The vkMusic playlist has already been created' + bcolors.ENDC)
+            playlistUri = item['uri']
+            break
+    
+    if not findVkMus:
+        print(bcolors.INFO + 'Created a vkMusic playlist' + bcolors.ENDC)
+        res = sp.user_playlist_create(user_id, name='VkMusic')
+        playlistUri = res['uri']
+    return playlistUri, False
 
-uris = []
-if FastSearch:
-    uris = fast_search(sp)
-else:
-    uris = slow_search(sp)
-print(uris)
-retrieved = list(OrderedDict.fromkeys(uris))
-print(bcolors.OKBLUE + 'found track count: ' + str(len(retrieved)) + bcolors.ENDC + '\n')
-print(bcolors.OKBLUE + 'Adding music to spotify: ' + str(len(retrieved)) + bcolors.ENDC)
+def delete_simular_tracks(sp, retrieved, p_uri):
+    print(bcolors.INFO + 'Getting tracks from the playlist' + bcolors.ENDC)
+    tracks = []
+    offset = 0
+    resp = sp.playlist_tracks(p_uri,
+                              offset=offset,
+                              fields='items.track.uri,total',
+                              limit=100
+                              )
+    offset += len(resp['items'])
+    total = resp['total']
+    for t in resp['items']:
+        tracks.append(t['track']['uri'])
+    while total > offset:
+        resp = sp.playlist_tracks(
+            p_uri, offset=offset, fields='items.track.uri,total', limit=100)
+        offset += len(resp['items'])
+        for t in resp['items']:
+            tracks.append(t['track']['uri'])
+    print(bcolors.INFO + 'Received ' +
+          str(len(tracks)) + ' tracks' + bcolors.ENDC)
+    listOfTracks = list(set(retrieved).difference(tracks))
+    print(bcolors.INFO + 'Removed ' + str(len(retrieved) - len(listOfTracks)) + ' similar tracks' + bcolors.ENDC)
+    return listOfTracks
 
-user_id = sp.me()['id']
-results = sp.current_user_playlists(limit=50)
-findVkMus = False
-playlistUri = ""
-for i, item in enumerate(results['items']):
-    if item['name'] == 'VkMusic':
-        findVkMus = True
-        print(bcolors.INFO + 'The vkMusic playlist has already been created' + bcolors.ENDC)
-        playlistUri = item['uri']
+def main():
+    if(vkDump):
+        get_vk_mus()
+    sp = sp_auth()
+    uris = []
+    if FastSearch:
+        uris = fast_search(sp)
+    else:
+        uris = slow_search(sp)
+    print('------------------------------------------------------------------------------\n')
+    retrieved = list(OrderedDict.fromkeys(uris))
+    print(bcolors.HEADER + 'Adding music to spotify, number of tracks: ' + str(len(retrieved)) + bcolors.ENDC)
+    playlistUri, playlistFound = sp_build_playlist(sp)
+    if not playlistFound:
+        listOfTracks = delete_simular_tracks(sp, retrieved, playlistUri)
+        add_track_2_spotify(sp, listOfTracks, playlistUri)
+    else: add_track_2_spotify(sp, retrieved, playlistUri)
 
-if not findVkMus:
-    print(bcolors.INFO + 'Created a vkMusic playlist' + bcolors.ENDC)
-    res = sp.user_playlist_create(user_id, name='VkMusic')
-    playlistUri = res['uri']
-
-chankSize = floor(len(retrieved) / 60)
-if chankSize == 0:
-    chankSize = 1
-chanks = [retrieved[i::chankSize] for i in range(chankSize)]
-print('\n' + bcolors.INFO + 'Chanks count: ' + str(len(chanks)) + bcolors.ENDC)
-count = 0
-for rn in chanks:
-    print(bcolors.INFO + 'Chank[' + str(count) +
-          '] added to playlist' + bcolors.ENDC)
-    sp.user_playlist_add_tracks(user_id, playlistUri, rn)
-    count += 1
+if __name__ == "__main__":
+    main()
