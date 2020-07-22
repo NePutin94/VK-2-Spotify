@@ -1,14 +1,17 @@
 # vk-to-spotify
 
 ## Install libs
-[vk_api](https://github.com/python273/vk_api)
-[spotipy](https://spotipy.readthedocs.io/en/2.13.0/)
+- [vk_api](https://github.com/python273/vk_api)
+- [spotipy](https://spotipy.readthedocs.io/en/2.13.0/)
 
 # Usage
 Basic installation:
 Open 'src.py' and set the values to variables
 - spotify auth: cid(SPOTIPY_CLIENT_ID), secret(SPOTIPY_CLIENT_SECRET), redirect(SPOTIPY_REDIRECT_URI)
 - vk auth: vkNumber, vkPass
+- Select the search method: fast or slow
+A quick search will most likely find more tracks, but the search accuracy will be low (there is a chance that it will find the wrong track that you need).
+Slow search will find fewer tracks, but it won't exactly add 'similar' tracks to your playlist
 
 Then you have two ways:
 - #### The first way
